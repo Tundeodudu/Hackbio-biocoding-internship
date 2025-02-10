@@ -1,0 +1,62 @@
+#Organizing the information
+
+Bibii = ("""
+"Name": "Abisola Olaleye",
+"Slack Username": "Bibii",
+"Email": "Abisola.olaleye@yahoo.com",
+"Hobby": "Singing",
+"Country": "Nigeria",
+"Discipline": "Biotechnology",
+"Preferred Programming Language": "Python"
+
+""")
+
+
+Latifatu = ("""
+"Name": "Latifatu Mohammed",
+"Slack Username": "Latifatu",
+"Email": "dr.mlatifatu@gmail.com",
+"Hobby": "Watching Movies",
+"Country": "Ghana",
+"Discipline": "Medical Laboratory Science",
+"Preferred Programming Language": "R"
+
+""")
+
+
+Naochi = ("""
+"Name": "Naomi Ogoke",
+"Slack Username": "Naochi",
+"Email": "ogokenaomi2018@gmail.com",
+"Hobby": "Listening to Music",
+"Country": "Nigeria",
+"Discipline": "Biochemistry",
+"Preferred Programming Language": "Python"
+
+""")
+
+
+Henry = ("""
+"Name": "Babatunde Owoloye",
+"Slack Username": "Henry",
+"Email": "tundeodudu@gmail.com",
+"Hobby": "Travelling",
+"Country": "Nigeria",
+"Discipline": "Biology",
+"Preferred Programming Language": "Python"
+
+""")
+
+
+Chinwe = ("""
+"Name": "Ganobi Chinwe",
+"Slack Username": "Chinwe",
+"Email": "ganobichinwe19@gmail.com",
+"Hobby": "Reading and Playing Games",
+"Country": "Nigeria",
+"Discipline": "Medical Microbiology",
+"Preferred Programming Language": "Python"
+
+""")
+
+print(Bibii + Latifatu + Naochi + Henry + Chinwe)
