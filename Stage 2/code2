@@ -1,0 +1,495 @@
+#Task 2.3
+
+import pandas as pd
+import numpy as np
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+
+# extract the data
+url = "https://raw.githubusercontent.com/HackBio-Internship/2025_project_collection/refs/heads/main/Python/Dataset/Pesticide_treatment_data.txt"
+data = pd.read_csv(url, sep="\t")
+
+print(data.head())
+
+
+# Extracting relevant columns for WT and mutants
+wt_dmso = data[data["Unnamed: 0"]== "WT_DMSO_1"].iloc[:, 1:].values.flatten()
+wt_8h = data[data["Unnamed: 0"]== "WT_pesticide_8h_1"].iloc[:, 1:].values.flatten()
+wt_24h = data[data["Unnamed: 0"]== "WT_pesticide_24h_1"].iloc[:, 1:].values.flatten()
+mutant_dmso = data[data["Unnamed: 0"]=="mutant_DMSO_1"].iloc[:, 1:].values.flatten()
+mutant_8h = data[data["Unnamed: 0"]== "mutant_8h_1"].iloc[:, 1:].values.flatten()
+mutant_24h = data[data["Unnamed: 0"]== "mutant_pesticide_24h_1"].iloc[:, 1:].values.flatten()
+
+metabolites = data.columns[1:]
+
+
+
+# Calculate ΔM for WT and mutants
+delta_wt = wt_24h - wt_dmso
+delta_mutant = mutant_24h - mutant_dmso
+
+
+# Generate a scatter plot showing the difference for ΔM for WT and Mutants
+plt.figure(figsize=(8,6))
+sns.scatterplot(x=delta_wt, y=delta_mutant)
+x_val= np.linspace(min(delta_wt), max(delta_mutant),100)
+plt.plot(x_val, x_val, color="green", linestyle="--", label = "y = x" ) # fitted line
+
+plt.xlabel("ΔM (WT)")
+plt.ylabel("ΔM (Mutant)")
+plt.title("Difference in Metablolic Response")
+plt.legend()
+plt.show()
+
+
+
+
+# calculating residuals usinf cutoff 0.3
+residuals =delta_mutant - delta_wt
+cutoff= 0.3
+#color ponts based on residuals
+color = np.where(np.abs(residuals) <= cutoff, "grey", "salmon")
+#scatterplot with colored residuals
+plt.figure(figsize=(8,6))
+sns.scatterplot(x=delta_wt, y=delta_mutant, hue=color, palette={"grey": "grey", "salmon": "salmon"})
+
+plt.plot(x_val, x_val, color = 'green', linestyle= "--", label="y = x") #fitted line
+plt.xlabel("ΔM (WT)")
+plt.ylabel("ΔM (Mutant)")
+plt.title("Difference in Metablolic Response with Residuals")
+plt.legend()
+plt.show()
+
+
+# identify the outliers
+outliers = metabolites[np.abs(residuals) > cutoff].tolist()
+print(outliers)
+len(outliers)
+
+
+
+wt_timepoints = ["WT_DMSO_1", "WT_pesticide_8h_1", "WT_pesticide_24h_1"]
+mut_timepoints = ["mutant_DMSO_1", "mutant_pesticide_8h_1", "mutant_pesticide_24h_1"]
+time_labels = ["0h", "8h", "24h"]
+if len(outliers) == 0:
+    print("No outliers detected above the threshold. Skipping plot.")
+    selected_metabolites = []
+elif len(outliers) < 6:
+    selected_metabolites = outliers  
+else:
+    selected_metabolites = np.random.choice(outliers, 6, replace=False).tolist() 
+if len(selected_metabolites) > 0:
+    plt.figure(figsize=(10, 6))
+
+    # Assign a unique color for each selected metabolite
+    colors = plt.cm.get_cmap("tab10", len(selected_metabolites))
+
+    for idx, metabolite in enumerate(selected_metabolites):
+        color = colors(idx)  
+
+        # WT
+        wt_values = data[data["Unnamed: 0"].isin(wt_timepoints)][["Unnamed: 0", metabolite]]
+        wt_values = wt_values.set_index("Unnamed: 0").T
+        plt.plot(time_labels, wt_values.iloc[0], marker='o', linestyle='-', color=color, label=f"{metabolite} (WT)")
+
+        # MUT
+        mut_values = data[data["Unnamed: 0"].isin(mut_timepoints)][["Unnamed: 0", metabolite]]
+        mut_values = mut_values.set_index("Unnamed: 0").T
+        plt.plot(time_labels, mut_values.iloc[0], marker='s', linestyle='--', color=color, label=f"{metabolite} (MUT)")
+
+    plt.xlabel("Time")
+    plt.ylabel("Metabolic Response")
+    plt.title("Metabolic Response Over 24h for 6 Selected Metabolites (WT vs MUT)")
+
+    plt.legend(loc="upper left", bbox_to_anchor=(1,1))
+    plt.tight_layout()  # Prevent layout issues
+    plt.show()
+
+
+
+
+
+
+#Task 2.1
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from scipy import stats
+
+#import dataset
+data_source = "https://raw.githubusercontent.com/HackBio-Internship/2025_project_collection/refs/heads/main/Python/Dataset/mcgc.tsv"
+data = pd.read_csv(data_source, sep='\t')
+metadata = pd.DataFrame({
+    "Strain": [
+        "Strain1_Rep1", "Strain1_Rep2", "Strain2_Rep1",
+        "Strain2_Rep2", "Strain3_Rep1", "Strain3_Rep2"
+    ],
+    "WT_1": ["A1", "A3", "A5", "A7", "A9", "A11"],
+    "MUT_1": ["A2", "A4", "A6", "A8", "A10", "A12"],
+    "WT_2": ["B1", "B3", "B5", "B7", "B9", "B11"],
+    "MUT_2": ["B2", "B4", "B6", "B8", "B10", "B12"],
+    "WT_3": ["C1", "C3", "C5", "C7", "C9", "C11"],
+    "MUT_3": ["C2", "C4", "C6", "C8", "C10", "C12"]
+})
+
+
+print(data.head())
+
+
+#convert data structure for analysis
+def convert_curve_time(data):
+    if 'time' not in data.columns:
+        raise ValueError("Input DataFrame must contain 'time' coulmn.")
+    data_time_indexed = data.set_index('time')
+    transposed_data = data_time_indexed.transpose()
+
+    x_values = data['time'].values
+    return transposed_data, x_values
+
+
+
+# processing mmetadata
+def process_metadata(metadata_df):
+    MD = []
+    for _, row in metadata_df.iterrows():
+        strain_rep = row['Strain']
+        strain, rep = strain_rep.split('_')
+        for exp_num in [1, 2, 3]:
+            wt_col = f'WT_{exp_num}'
+            mut_col = f'MUT_{exp_num}'
+
+            MD.extend([
+                {'curve_id': row[f'WT_{exp_num}'], 'strain': strain, 'rep': rep, 'type': 'WT', 'experiment': exp_num},
+                {'curve_id': row[f'MUT_{exp_num}'], 'strain': strain, 'rep': rep, 'type': 'MUT', 'experiment': exp_num}
+            ])
+    return pd.DataFrame(MD)
+
+
+def strain_curve_plot(converted_data, x_values, unit_type="min"):
+    metadata_curve = process_metadata(metadata)
+    fig, axs = plt.subplots(1, 3, figsize=(22, 7))
+    fig.subplots_adjust(top=0.85, bottom=0.35, wspace=0.35)
+    fig.suptitle('Evolution of Growth Curves of the Wild Type and Mutant Strains', y=1, fontsize=14)
+    type_colors ={'WT': 'Green', 'MUT': 'Purple'}
+    rep_styles = {'Rep1': '-', 'Rep2': '--'}
+
+    for idx, strain in enumerate(sorted(metadata_curve['strain'].unique())):
+        ax = axs[idx]
+        ax.set_title(f"{strain}", fontsize=14, pad=15)
+        ax.set_xlabel(f"Time ({unit_type})", fontsize=10)
+        ax.set_ylabel("OD600 (log scale)", fontsize=10)
+        ax.set_yscale('log')
+
+        strain_data = metadata_curve[metadata_curve['strain'] == strain]
+        for _, row in strain_data.iterrows():
+            ax.plot(
+                x_values,
+                converted_data.loc[row['curve_id']],
+                color=type_colors[row['type']],
+                linestyle=rep_styles[row['rep']],
+                linewidth=1.5
+            )
+        y_min = converted_data.loc[strain_data['curve_id']].min().min()
+        y_max = converted_data.loc[strain_data['curve_id']].max().max()
+        ax.set_ylim(y_min * 0.5, y_max * 2)
+        ax.tick_params(axis='both', labelsize=10) 
+    plt.tight_layout()
+    plt.show()
+
+
+def _80_percent_density(data, time_step=1):
+    max_density = data.max().max()
+
+    threshold = 0.8 * max_density
+
+    for col in data.columns:
+        if (data[col] >= threshold).any():
+            time_80_percent =int(col) * time_step
+            density_at_80 = data[col].max()
+            return max_density, time_80_percent, density_at_80
+    return max_density, None, None
+
+
+
+converted_data, x_values = convert_curve_time(data)
+strain_curve_plot(converted_data, x_values)
+
+
+results = []
+for curve_id in converted_data.index:
+    curve_data = pd.DataFrame(converted_data.loc[curve_id]).transpose() # for fromatting
+    curve_data.columns = curve_data.columns.astype(int) # change to integers
+    max_dens, time_80, dens_80 = _80_percent_density(curve_data, time_step= 1) # analyse curve
+    results.append({
+        'curve_id': curve_id,
+        'max_density': max_dens,
+        'time_to_80%': time_80,
+        'density_at_80%': dens_80
+    })
+results_df = pd.DataFrame(results)
+metadata_curve = process_metadata(metadata)
+results_df = results_df.merge(metadata_curve[['curve_id', 'strain', 'type']], on = 'curve_id')
+
+# scatterplot for time to reach 80% carrying capacity
+
+plt.figure(figsize=(8, 6))
+color_map ={'WT': 'Green', 'MUT': 'Purple'}
+marker_map = {'Strain1': 'o', 'Strain2': 's', 'Strain3': '^'}
+for strain in ['Strain1', 'Strain2', 'Strain3']:
+    for t in ['WT', 'MUT']:
+        subset = results_df[(results_df['strain'] == strain) & (results_df['type'] == t)]
+        if not subset.empty:
+            plt.scatter(subset['time_to_80%'], subset['density_at_80%'],
+                        c=color_map[t], marker=marker_map[strain], s=150, edgecolor='w', alpha=0.9, label=f'{strain} {t}')
+
+plt.title('Time to 80% Carrying Capacity by Strain and Type', fontsize = 14)
+plt.xlabel('Time (minutes)', fontsize = 12)
+plt.ylabel('Density at 80%', fontsize = 12)
+plt.grid(alpha=0.2)
+plt.legend()
+plt.show()
+
+
+
+
+#boxplot- time to 80% by strain and ttype
+plt.figure(figsize= (10, 6))
+sns.boxplot(x='strain', y='time_to_80%', hue ='type', data = results_df, palette= color_map, width = 0.5, linewidth = 1.5)
+
+plt.title('Time to Reach Carrying Capacity by Strain and Mutation Type', pad=20)
+plt.xlabel('Strain', labelpad=15)
+plt.ylabel('Time (minutes)', labelpad=15)
+plt.legend(title='Mutation Type', frameon=False)
+sns.despine()
+plt.show()
+
+
+
+# analysis
+valid_df = results_df.dropna(subset=['time_to_80%'])
+wt_times = valid_df[valid_df['type'] == 'WT']['time_to_80%'] #time taken by wild type
+mut_times = valid_df[valid_df['type'] == 'MUT']['time_to_80%'] #time taken by mutant type
+wt_mean= np.mean(wt_times)
+mut_mean= np.mean(mut_times)
+
+#checking for significant differences
+stat, p_value =stats.mannwhitneyu(wt_times, mut_times)
+
+print(f"W statistic: {stat:.2f}")
+print(f"P-value: {p_value:.3f}")
+print(f"WT Mean Time: {wt_mean:.2f} min")
+print(f"MUT Mean Time: {mut_mean:.2f} min")
+
+
+
+
+
+
+
+"""
+W statistic: 171.50
+P-value: 0.775
+WT Mean Time: 663.33 min
+MUT Mean Time: 644.17 min
+from the analysis, we can conclude that the knockout manipulation did not affect the growth of the bacteria since there is no significant difference between the wild and mutant type.
+"""
+
+
+
+
+#Task 2.4 
+
+import pandas as pd
+import requests
+from io import StringIO
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+
+# extracting data and columns
+sift_url = "https://raw.githubusercontent.com/HackBio-Internship/public_datasets/main/R/datasets/sift.tsv"
+response = requests.get(sift_url)
+raw_data = response.text
+sift_df = pd.read_csv(StringIO(raw_data), delimiter=r"\s+", engine="python")
+
+foldx_url = "https://raw.githubusercontent.com/HackBio-Internship/public_datasets/main/R/datasets/foldX.tsv"
+response = requests.get(foldx_url)
+raw_data = response.text
+foldx_df = pd.read_csv(StringIO(raw_data), delimiter=r"\s+", engine="python")
+
+
+
+# Creating a New Column: specific_Protein_aa, If the Protein column contains the value "A5A607" and the Amino_acid column contains the value "E63D", the resulting specific_Protein_aa column will contain the concatenated value "A5A607_E63D".
+sift_df["specific_Protein_aa"] = sift_df["Protein"] + "_" + sift_df["Amino_Acid"]
+foldx_df["specific_Protein_aa"] = foldx_df["Protein"] + "_" + foldx_df["Amino_Acid"]
+
+
+
+
+# Using the specific_Protein_aa column, Merging SIFT and FoldX Datasets
+foldx_dataframe_clean = foldx_df.drop(columns=['Protein', 'Amino_Acid'])
+final_dataframe = pd.merge(sift_df, foldx_dataframe_clean, on='specific_Protein_aa')
+
+
+
+# Using the criteria proposed by the authors, we try to find all mutations that have a SIFT score below 0.05 and FoldX Score above 2.
+deleterious_mutations = final_dataframe[(final_dataframe['sift_Score'] < 0.05) & (final_dataframe['foldX_Score'] > 2)]
+
+
+
+# Investigating the Amino Acid with the Greatest Functional and Structural Impact
+
+
+
+# Data Preparation and Processing
+
+# The logic to extract the Amino acid that got mutated : 
+final_dataframe['Mutated_AA'] = final_dataframe['Amino_Acid'].str[0]
+
+# We calculated the number of occurence of each amino acid that will be extracted
+frequency_table = final_dataframe['Amino_Acid'].str[0].value_counts().reset_index()
+
+# We renamed the table for better understanding : 
+frequency_table.columns = ['Original_Amino_Acid', 'Frequency']
+
+# We sorted the frequency_table by number of occurence:
+frequency_table = frequency_table.sort_values(by='Frequency', ascending=False)
+
+
+
+# PLOTTING : ( BARPLOT )
+plt.figure(figsize=(10, 6))
+sns.barplot(
+    data=frequency_table,
+    x='Original_Amino_Acid',  
+    y='Frequency',
+    palette='viridis'
+)
+plt.title('Frequency of Original Amino Acids')
+plt.xlabel('Amino Acid')
+plt.ylabel('Count')
+plt.xticks(rotation=45)
+plt.show()
+# PLOTTING : ( PIECHART )
+plt.figure(figsize=(8, 8))
+
+wedges, texts, autotexts = plt.pie(
+    frequency_table['Frequency'],
+    labels=frequency_table['Original_Amino_Acid'],
+    autopct='%.1f%%', 
+    startangle=90,      
+    colors=sns.color_palette('tab20b'),  
+    wedgeprops={'edgecolor': None},
+    pctdistance=0.92,  
+    textprops={'fontsize': 10}
+)
+
+
+for autotext in autotexts:
+    autotext.set_color('white')
+    autotext.set_weight('bold')
+
+plt.title('Proportion of Original Amino Acids', fontsize=14)
+plt.tight_layout()
+plt.show()
+
+
+'''
+Key Findings: Mutation Frequency and Impact
+Our analysis reveals that:
+
+1. Alanine (A) is the most frequently mutated residue in high-impact variants, with 11,828 mutations (15.7% of the dataset). This highlights its crucial role in maintaining protein stability and evolutionary conservation, particularly in structurally sensitive regions like hydrophobic cores.
+2. Valine (V) ranks second, with 6,241 mutations (8.3%), emphasizing the destabilizing effects of mutating hydrophobic residues essential for structural integrity.
+3. Cysteine (C) and Tryptophan (W) show significantly fewer high-impact mutations, with 584 and 403 cases, respectively.
+
+Explaining the Rarity of Cysteine and Tryptophan Mutations
+The low frequency of high-impact mutations in Cysteine and Tryptophan can be attributed to:
+
+- Cysteine: Its involvement in disulfide bond formation makes mutations evolutionarily unfavorable due to strong purifying selection.
+- Tryptophan: Its large, rigid side chain is rarely substituted without severe structural consequences.
+'''
+
+
+
+
+
+
+# Task 2.7
+
+
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np
+
+df = pd.read_csv('https://raw.githubusercontent.com/HackBio-Internship/public_datasets/main/R/nhanes.csv', sep=',')
+df['nPregnancies'] = df['nPregnancies'].replace(np.nan, 0)
+df['nBabies'] = df['nBabies'].replace(np.nan, 0)
+df['Education'] = df['Education'].replace(np.nan, 'Unkown')
+df['MaritalStatus'] = df['MaritalStatus'].replace(np.nan, 'Unkown')
+df['RelationshipStatus'] = df['RelationshipStatus'].replace(np.nan, 'Unkown')
+df['SmokingStatus'] = df['SmokingStatus'].replace(np.nan, 'Unkown')
+df['DiabetesAge'] = df['DiabetesAge'].replace(np.nan, 'Unkown')
+df['SleepHrsNight'] = df['SleepHrsNight'].replace(np.nan, 'Unkown')
+df['Work'] = df['Work'].replace(np.nan, 'Unkown')
+df['AlcoholYear'] = df['AlcoholYear'].replace(np.nan, 0)
+df['AlcoholDay'] = df['AlcoholDay'].replace(np.nan, 0)
+df['PhysActiveDays'] = df['PhysActiveDays'].replace(np.nan, 0)
+df['PhysActive'] = df['PhysActive'].replace(np.nan, 'Unkown')
+df['Income'] = df['Income'].replace(np.nan, 0)
+df['Poverty'] = df['Poverty'].replace(np.nan, 0)
+df['WeightPounds'] = df['Weight']*2.2
+df.head()
+
+df.dropna(inplace=True)
+df.info()
+df.shape
+
+plt.figure(figsize=(12,12))
+plt.subplot(2,2,1)
+sns.histplot(df['BMI'])
+plt.title('BMI Distribution')
+plt.subplot(2,2,2)
+sns.histplot(df['Weight'])
+plt.title('Weight Distribution')
+plt.subplot(2,2,3)
+sns.histplot(df['WeightPounds'])
+plt.title('WeightPounds Distribution')
+plt.subplot(2,2,4)
+sns.histplot(df['Age'])
+plt.title('Age Distribution')
+plt.show()
+
+print(df['Pulse'].mean())
+print(df['BPDia'].min(),'-', df['BPDia'].max())
+print(df['Income'].var(), '-', df['Income'].std())
+
+
+plt.figure(figsize=(12,12))
+plt.subplot(2,2,1)
+sns.scatterplot(data=df, x='Weight', y='Height', hue='Gender')
+plt.title('Weight vs Height by Gender')
+plt.subplot(2,2,2)
+sns.scatterplot(data=df, x='Weight', y='Height', hue='Diabetes')
+plt.title('Weight vs BMI by Diabetic Status')
+plt.subplot(2,2,3)
+sns.scatterplot(data=df, x='Weight', y='Height', hue='SmokingStatus')
+plt.title('Weight vs Height by Smoking Status')
+plt.show()
+
+from scipy import stats
+df['Gender'] = pd.get_dummies(df['Gender'], drop_first=True)
+df['Diabetes'] = pd.get_dummies(df['Diabetes'], drop_first=True)
+df= df[df['RelationshipStatus'] != 'Unkown']
+df['RelationshipStatus'] = pd.get_dummies(df['RelationshipStatus'], drop_first=True)
+
+t_stat, p_value = stats.ttest_ind(df['Age'], df['Gender'])
+print(t_stat, p_value)
+t_stat, p_value = stats.ttest_ind(df['AlcoholYear'], df['RelationshipStatus'])
+print(t_stat, p_value)
+t_stat, p_value = stats.ttest_ind(df['BMI'], df['Diabetes'])
+print(t_stat, p_value)
+
